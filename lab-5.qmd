@@ -1,0 +1,448 @@
+---
+title: "Lab 5: Nonparametric Methods and Categorical Data"
+
+execute:
+  warning: false
+
+format: 
+  html: 
+    toc: true
+    df-print: paged
+    embed-resources: true
+---
+
+```{r} 
+#| code-fold: TRUE
+
+# load required libraries
+
+library(readxl)
+library(htmltools)
+library(dplyr)
+library(DescTools)
+library(exact2x2)
+
+```
+
+## Nonparametric Methods
+
+### Tests for Paired Data or Single Sample
+
+$\text{H}_0$: Median difference among pairs = 0 (paired) or $\text{H}_0$: Median = $M_0$ (single sample)
+
+[Sign Test:]{.underline}
+
+-   Uses the signs (+ or -) of the differences only
+-   D = number of positive differences
+-   If the number of non-zero differences (n) is large, then the normal approximation is appropriate
+    -   Recall the test-statistic is $Z_+ = \frac{D - n/2}{\sqrt{n/4}}$
+-   For small n, use binomial distribution to calculate p-value for D (D is a binomial random variable with parameters n and p=1/2 under H0)
+    -   We can make use of `binom.test()` when this is the case
+-   Preferred if data are very skewed or only signs are available
+
+[Wilcoxon Signed-Rank Test:]{.underline}
+
+-   Nonparametric analogue to the paired t-test
+-   Incorporates the magnitude of differences via ranks
+-   T = sum of the ranks of the positive differences
+-   Use `wilcox.test()` with the argument 'paired = TRUE' to perform this test (works for both one sample and paired two sample cases)
+    -   When n \> 50, `wilcox.test()` uses a normal approximation
+    -   When n $\leq$ 50, `wilcox.test()` provides an exact calculation for the p-value
+-   More powerful than the sign test and generally preferred when magnitudes are available
+
+### Test for Independent Data
+
+$\text{H}_0$: $Median_1 = Median_2$
+
+[Wilcoxon Rank-Sum Test:]{.underline}
+
+-   Nonparametric equivalent to the two-sample t-test
+
+-   W = smaller of the 2 sums of the ranks
+
+-   Use 'wilcox.test()' with the argument 'paired = FALSE' (this is the default)
+
+-   Works best when the distributions of the two populations have the same shape, but they may be shifted to have different medians
+
+### Examples
+
+Recall the REE example from lecture (data included in CF_REE.xlsx):
+
+Resting energy expenditure (REE) was measured on 13 cystic fibrosis (CF) patients and 13 healthy individuals matched on age, sex, height, and weight. Do individuals suffering from CF use a different amount of energy in a resting state than individuals without the disease?
+
+Variables include:
+
+-   Pair = pair ID
+
+-   CF = REE (kcal/day) in CF patient
+
+-   Healthy = REE (kcal/day) in healthy patient
+
+-   Diff = Difference (CF -- Healthy) in REE (kcal/day)
+
+We have paired data here, so our outcome of interest is the difference between the CF and Healthy patients.
+
+```{r} 
+#| code-fold: TRUE
+
+cf_ree <- read_xlsx("CF_REE-1.xlsx")
+head(cf_ree)
+
+```
+
+#### Sign Test
+
+Let's start with the sign test. We don't have a large sample (only 13 observations), so we'll use the binomial distribution to compute a p-value.  If we did not already have a variable for the difference included in the data set, we would start by adding a column of the differences.
+
+```{r}
+#| code-fold: TRUE
+
+# Get the number of positive differences
+D <- sum(cf_ree$Diff > 0)
+
+# Get number of non-zero differences
+n <- sum(abs(cf_ree$Diff) > 0)
+
+# Input the values to binom.test function
+sign_test_ree <- binom.test(D, n, p = 0.5, alternative = "two.sided")
+sign_test_ree
+
+```
+
+#### Wilcoxon Signed-rank
+
+Next we'll perform the Wilcoxon signed-rank test. Pass in the columns we have for the CF and Healthy groups as arguments, remembering to set 'paired = TRUE'.
+
+```{r}
+#| code-fold: TRUE
+
+wil_sign_rank_ree <- wilcox.test(cf_ree$CF, cf_ree$Healthy, paired = TRUE)
+wil_sign_rank_ree
+
+```
+
+Our null hypothesis above is that the location shift is 0 (i.e., the distributions of our two groups are centered at the same value), but we could change that if we wanted. Before we collected our sample, say we had reason to believe distribution of REE values for CF patients was shifted up by 100 kcal/day compared to Healthy patients. Then we simply include 'mu = 100' parameter in the function.
+
+```{r}
+#| code-fold: TRUE
+
+wil_sign_rank_ree_2 <- wilcox.test(cf_ree$CF, cf_ree$Healthy, mu = 100, paired = TRUE)
+wil_sign_rank_ree_2
+
+```
+
+#### Wilcoxon rank-sum
+
+Recall the PKU example from lecture (subset of data included in PKU_sub.xlsx):
+
+Phenylketonuria (PKU) is a rare condition in which a baby is born without the ability to properly break down an amino acid called phenylalanine. Normalized Mental Age (nMA) is measured in months, and is 'normalized' to 48 months. A study examined nMAs in children with PKU, comparing children with low vs. high phenylalanine levels. A subset of the data has n=10 patients in the low group and n=9 in the high group. Does nMA differ between the 2 groups?
+
+Variables include:
+
+-   ID = patient ID
+-   Group = Group (Low or High)
+-   nMA = nMA
+
+```{r}
+#| code-fold: TRUE
+
+pku_sub <- read_xlsx("PKU_sub-1.xlsx")
+head(pku_sub)
+
+```
+
+We have two independent groups here, and will use the Wilcoxon rank-sum test to see if there's evidence the distributions of nMA have different locations for the two groups.
+
+To do so, we again use the `wilcox.test()` function, but this time with 'paired = FALSE'. We could split the nMA into two for the Low and High groups and input them into the function, or we can use the '\~' operator to convey how the data should be split.
+
+```{r}
+#| code-fold: TRUE
+
+wil_rank_sum_pku <- wilcox.test(nMA ~ Group, paired = FALSE, data = pku_sub)
+wil_rank_sum_pku
+
+```
+
+## Categorical Data
+
+```{r}
+#| code-fold: true
+
+# Fun little side note: I already had the table below in Word. 
+# Rather than trying to replicate it, I saved the word document as a .html file, 
+# then copied just the table portion into its own .html and read it in. Voila!
+
+htmltools::includeHTML("tests_table.html")
+
+```
+
+\*See lecture notes for conditions where test is appropriate
+
+The point estimate for the difference in proportions (risk difference) is:
+
+$$\hat{p}_1 - \hat{p}_2$$
+ 
+A 100% × (1 − \alpha) CI for the difference in two proportions (normal approximation) is given by:
+
+$$\hat{p}_1 - \hat{p}_2 \pm z_{1-\alpha/2} \sqrt{\hat{p}_1\hat{q}_1/n_1 + \hat{p}_2\hat{q}_2/n_2}$$
+
+The point estimate for the odds ratio (OR) is:
+
+$$\widehat{OR} = \frac{\hat{p}_1\hat{q}_2}{\hat{p}_2\hat{q}_1}= \frac{ad}{bc}$$
+
+A 100% × (1 − α) CI for the OR (normal approximation) is given by $(e^{c_1},e^{c_2})$, where
+
+$$c_1 = ln(\widehat{OR}) - z_{1-\alpha/2} \sqrt{\frac{1}{a} + \frac{1}{b} + \frac{1}{c} + \frac{1}{d} }$$
+
+$$c_2 = ln(\widehat{OR}) + z_{1-\alpha/2} \sqrt{\frac{1}{a} + \frac{1}{b} + \frac{1}{c} + \frac{1}{d} }$$
+
+
+
+### 2 Proportions (Independent)
+
+Recall the "lowbwt.xlsx" example we've seen previously. The data set has the following variables:
+
+-   sbp = systolic blood pressure
+-   sex = sex (1=male; 0=female)
+-   tox = toxemia diagnosis for mother (1=yes; 0=no)
+-   grmhem = germinal matrix hemorrhage (1=yes; 0=no)
+-   gestage = gestational age
+-   apgar5 = apgar score at 5 minutes
+
+```{r} 
+#| code-fold: TRUE
+
+lowbwt <- read_xlsx("lowbwt.xlsx")
+head(lowbwt)
+
+```
+
+Suppose we are interested in whether the proportion of mothers of low birth weight infants who have a toxemia diagnosis during pregnancy differs by sex of the infant. We can start by creating a 2 x 2 table.
+
+```{r} 
+#| code-fold: TRUE
+
+tbl1 <- table(lowbwt$tox, lowbwt$sex)
+tbl1
+
+```
+
+As is, the table isn't terribly informative, so we can do a few things to improve it:
+
+```{r} 
+#| code-fold: TRUE
+
+# Change sex and tox variables from numeric to factors and rename the levels
+lowbwt <- lowbwt %>%
+              mutate(sex = factor(sex, labels = c("Female", "Male")),
+                     tox = factor(tox, labels = c("No", "Yes")))
+
+# recreate table
+tbl2 <- table(lowbwt$tox, lowbwt$sex)
+
+# Add dimension names
+dimnames(tbl2) <- list("Toxemia" = c("No", "Yes"), "Sex" = c("Female", "Male"))
+
+# Reorder the tox rows so "Yes" appears first (more conventional to do so)
+tbl2 <- tbl2[c("Yes", "No"), ]
+tbl2
+
+
+```
+
+Better! Now let's perform tests to see if the proportions of infants with Toxemia are equal between sexes ($\text{H}_0: p_{f} = p_{m}$).
+
+#### Z-test
+
+First lets perform the Z test "by hand".
+
+```{r} 
+#| code-fold: TRUE
+
+# Compute values needed for test
+n_female <- sum(tbl2[,1])
+n_male <- sum(tbl2[,2])
+
+p_female <- tbl2[1,1]/n_female
+p_male <- tbl2[1,2]/n_male
+
+p_hat <- sum(tbl2[1,])/sum(tbl2)
+q_hat <- 1 - p_hat
+
+# Check if normal approximation is appropriate
+n_female*p_hat*q_hat
+n_male*p_hat*q_hat
+
+```
+
+Using our check for whether the normal approximation is appropriate, our values are greater than 5, so we can proceed.
+
+```{r} 
+#| code-fold: TRUE
+
+test_stat <- (p_female - p_male)/sqrt(p_hat*q_hat*(1/n_female + 1/n_male))
+paste0("Test stat: ", round(test_stat,4))
+
+# Calculate two-sided p-value
+p_val <- 2*pnorm(abs(test_stat), lower.tail = FALSE)
+paste0("p-value: ", round(p_val,4))
+
+```
+
+Finishing the test gets us a p-value of 0.707, so there isn't enough evidence to suggest the proportions differ.
+
+We can use `prop.test()` to do the same by passing in a vector of counts of successes and a vector of counts of observations. We also want to set 'correct = FALSE' to turn of Yate's continuity correction. 
+
+Doing so results in the exact same p-value & conclusion! We also get the added benefit of an included confidence interval (confidence level can be adjusted with the 'conf.level' argument).
+
+```{r} 
+#| code-fold: TRUE
+
+# Toxemia success ("Yes") counts by sex
+tox_yes <- tbl2[1,]
+
+# Total observations (n) by sex
+tox_counts <- colSums(tbl2)
+
+z_test_res <- prop.test(tox_yes, tox_counts, correct = FALSE)
+z_test_res
+
+```
+
+
+#### $\chi^2$-test
+
+If you have a contingency table as we do, you can provide it as an argument to `chisq.test()`. As discussed in the lecture, a Z-test and $\chi^2$-test will result in identical p-values. Notice these results don't have a confidence interval for the difference in proportions, though.
+
+```{r} 
+#| code-fold: TRUE
+
+csq_test_res <- chisq.test(tbl2, correct = FALSE)
+csq_test_res
+
+```
+
+#### Fisher's exact test
+
+If conditions aren't met for normal approximation, we can use Fisher's exact test instead by passing in a contingency table as an argument to `fisher.test()`.
+
+```{r} 
+#| code-fold: TRUE
+
+fisher_test_res <- fisher.test(tbl2)
+fisher_test_res
+
+```
+
+As with the previous methods, the test results suggest there isn't a significant relationship between sex and Toxemia among these infants. Here our confidence interval is in terms of an odds ratio.
+
+### 2 Proportions (Paired)
+
+Recall the lymph node example from Lab #4:
+
+The degree of clinical agreement among physicians on the presence or absence of generalized lymphadenopathy was assessed in 32 randomly selected participants from a prospective study of male sexual contacts of men with acquired immunodeficiency syndrome (AIDS) or an AIDS-related condition (ARC). The total number of palpable lymph nodes was assessed by each of three physicians. Results from two of the three physicians are presented in lymph_nodes.xlsx. The data set has the following variables:
+
+- ID = patient ID
+- DocA = # of palpable lymph nodes found by Doctor A
+- DocB = # of palpable lymph nodes found by Doctor B
+- Diff = DocA - DocB
+
+```{r} 
+#| code-fold: TRUE
+
+lymph <- read_xlsx("lymph_nodes-1.xlsx")
+head(lymph)
+
+```
+
+Suppose we are interested in the proportion with more than 3 lymph nodes found. We can create a new variable for each doctor that equals 1 if more than 3 lymph nodes were found and 0 if not. 
+
+```{r} 
+#| code-fold: TRUE
+
+lymph <- lymph %>%
+  mutate(DocA_3 = ifelse(DocA > 3, 1, 0),
+         DocB_3 = ifelse(DocB > 3, 1, 0))
+head(lymph)
+
+```
+
+Is there a difference between the proportion with more than 3 lymph nodes as assessed by Doctor A vs. Doctor B? 
+
+Since these are paired proportions, we can use McNemar’s test with `mcnemar.test()`. As before, we'll turn off continuity correction
+
+```{r} 
+#| code-fold: TRUE
+
+# Create a contingency table
+lymph_table <- table(lymph$DocA_3, lymph$DocB_3)
+
+# Perform McNemar's Test
+mcnemar_result <- mcnemar.test(lymph_table, correct = FALSE)
+mcnemar_result
+
+```
+
+If we need to perform an exact version of the test, we can use the `mcnemar.exact()` function from the 'exact2x2' library.
+
+```{r} 
+#| code-fold: TRUE
+
+mcnemar_exact_result <- mcnemar.exact(lymph_table)
+mcnemar_exact_result
+
+```
+
+### R $\times$ C tables
+
+Back to the lowbwt data, suppose we are interested in gestational age and want to categorize it as extremely preterm (less than 28 weeks), very preterm (28 to 32 weeks), and moderate to late preterm (32 to 37 weeks). We can create a new variable, 'gestage_cat':
+
+```{r} 
+#| code-fold: TRUE
+
+# Create the gestational age category
+lowbwt <- lowbwt %>%
+  mutate(gestage_cat = case_when(
+    gestage < 28 ~ 1,
+    gestage >= 28 & gestage < 32 ~ 2,
+    gestage >= 32 ~ 3
+  ))
+
+head(lowbwt[,c(5,7)])
+
+```
+
+Are gestational age and toxemia related?
+
+The following code gives you the $\chi^2$ test and Fisher’s exact test. 
+
+```{r} 
+#| code-fold: TRUE
+
+# Create the contingency table to use
+tbl3 <- table(lowbwt$tox, lowbwt$gestage_cat)
+
+# Chi-squared test
+chi_sq_result <- chisq.test(tbl3)
+chi_sq_result
+
+# Fisher's Exact Test
+fisher_result <- fisher.test(tbl3)
+fisher_result
+```
+
+The answer appears to be an emphatic "yes, they're related". The p-values suggest there's strong evidence to reject the null hypotheses in both tests. 
+
+#### Trend test
+
+However, we haven't taken full advantage of the ordinal nature of the gestational age categories with the above tests. We can use the `CochranArmitageTest ()` function from the 'DescTools' library to perform trend tests.
+
+```{r} 
+#| code-fold: TRUE
+
+trend_test_result <- CochranArmitageTest (tbl3)
+trend_test_result
+
+```
+
+This suggests there's strong evidence of a trend in the proportions.
